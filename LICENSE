@@ -1,1 +1,1548 @@
+"""LightMaze · 偏振光路解谜（Python 控制台版）"""
+import copy
+import io
+import math
+import shutil
+import sys
 
+# 强制 PyCharm / Windows 终端用 UTF-8，避免中文乱码或 UnicodeEncodeError
+if sys.version_info >= (3, 7):
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except (AttributeError, OSError):
+        pass
+
+# ============================================================ 关卡数据
+
+LEVELS = [{'name': '第 1 关 · 裂光',
+  'tag': '入门 · 分光',
+  'theme': 0,
+  'tip': '半透镜把一束光劈成两束：一路直穿，一路被折向下。两个目标必须同时亮起。',
+  'intro': '分光镜把一束光分成「透射」与「反射」两路，每路只剩一半能量——所以两路都要精打细算。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'elements': [{'type': 'splitter',
+                'cx': 280,
+                'cy': 310,
+                'angleDeg': 45,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 620,
+                'cy': 340,
+                'angleDeg': 330,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 780,
+                'cy': 180,
+                'angleDeg': 195,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 900, 'y': 140, 'r': 24, 'required': 'ANY', 'polTol': 12, 'minPower': 0.297},
+              {'x': 820,
+               'y': 520,
+               'r': 24,
+               'required': 'ANY',
+               'polTol': 12,
+               'minPower': 0.293}],
+  'solution': [{'cx': 530, 'cy': 310, 'angleDeg': -12.34},
+               {'cx': 280, 'cy': 500, 'angleDeg': 46.06}],
+  'par': 0.375},
+ {'name': '第 2 关 · 三色棱镜',
+  'tag': '色散 · 三色',
+  'theme': 1,
+  'tip': '白光进棱镜被拆成红绿蓝三束，各奔东西。三个目标只认自己那一种颜色。',
+  'intro': '棱镜把白光色散成红、绿、蓝三束单色光，它们以略微不同的角度飞出——你必须分别接住。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'elements': [{'type': 'prism',
+                'cx': 300,
+                'cy': 310,
+                'angleDeg': 90,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 560,
+                'cy': 460,
+                'angleDeg': 195,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 400,
+                'cy': 360,
+                'angleDeg': 315,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 800,
+                'cy': 260,
+                'angleDeg': 15,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 900, 'y': 110, 'r': 22, 'required': 'R', 'polTol': 12, 'minPower': 0.326},
+              {'x': 900, 'y': 420, 'r': 22, 'required': 'G', 'polTol': 12, 'minPower': 0.327},
+              {'x': 900, 'y': 545, 'r': 22, 'required': 'B', 'polTol': 12, 'minPower': 0.325}],
+  'solution': [{'cx': 594.49, 'cy': 252.76, 'angleDeg': -18.02},
+               {'cx': 640, 'cy': 310, 'angleDeg': -168.53},
+               {'cx': 594.49, 'cy': 367.24, 'angleDeg': -159.4}],
+  'par': 0.417},
+ {'name': '第 3 关 · 偏振之门',
+  'tag': '偏振 · 起偏',
+  'theme': 2,
+  'tip': '偏振片把光「梳」成 60° 方向。两个目标都只收 60° 偏振的光——光送到了，方向不对照样不算。',
+  'intro': '偏振片只放通与透光轴一致的分量：自然光通过后强度减半，并被起偏成轴向方向。',
+  'source': {'x': 70, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'elements': [{'type': 'polarizer',
+                'cx': 240,
+                'cy': 420,
+                'angleDeg': 195,
+                'length': 96,
+                'axisDeg': 60,
+                'movable': True},
+               {'type': 'splitter',
+                'cx': 290,
+                'cy': 310,
+                'angleDeg': 45,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 420,
+                'cy': 100,
+                'angleDeg': 180,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 420,
+                'cy': 540,
+                'angleDeg': 15,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 900,
+               'y': 150,
+               'r': 24,
+               'required': 'W',
+               'needPol': 60,
+               'polTol': 12,
+               'minPower': 0.143},
+              {'x': 800,
+               'y': 540,
+               'r': 24,
+               'required': 'W',
+               'needPol': 60,
+               'polTol': 12,
+               'minPower': 0.141}],
+  'solution': [{'cx': 180, 'cy': 310, 'angleDeg': 90},
+               {'cx': 540, 'cy': 310, 'angleDeg': -11.98},
+               {'cx': 290, 'cy': 500, 'angleDeg': 47.24}],
+  'par': 0.181},
+ {'name': '第 4 关 · 半波扭转',
+  'tag': '偏振 · 半波片',
+  'theme': 3,
+  'tip': '偏振片把光锁死在 0°，目标却要 90°。半波片能把偏振方向「翻」过去——快轴到底该摆多少度？',
+  'intro': '半波片(λ/2)把偏振方向沿快轴做镜像：出射角 = 2 × 快轴 - 入射偏振。想把 0° 转成 90°，快轴就是 45°。',
+  'source': {'x': 70, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'elements': [{'type': 'polarizer',
+                'cx': 500,
+                'cy': 360,
+                'angleDeg': 195,
+                'length': 96,
+                'axisDeg': 0,
+                'movable': True},
+               {'type': 'waveplate',
+                'cx': 720,
+                'cy': 280,
+                'angleDeg': 315,
+                'length': 96,
+                'axisDeg': 45,
+                'movable': True},
+               {'type': 'splitter',
+                'cx': 330,
+                'cy': 310,
+                'angleDeg': 45,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 100,
+                'cy': 480,
+                'angleDeg': 300,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 660,
+                'cy': 440,
+                'angleDeg': 165,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 920,
+               'y': 150,
+               'r': 24,
+               'required': 'W',
+               'needPol': 90,
+               'polTol': 12,
+               'minPower': 0.138},
+              {'x': 840,
+               'y': 540,
+               'r': 24,
+               'required': 'W',
+               'needPol': 90,
+               'polTol': 12,
+               'minPower': 0.136}],
+  'solution': [{'cx': 156.67, 'cy': 310, 'angleDeg': 90},
+               {'cx': 243.33, 'cy': 310, 'angleDeg': 90},
+               {'cx': 580, 'cy': 310, 'angleDeg': -12.6},
+               {'cx': 330, 'cy': 500, 'angleDeg': 47.24}],
+  'par': 0.174},
+ {'name': '第 5 关 · 能量极限',
+  'tag': '能量 · 衰减',
+  'theme': 4,
+  'tip': '每次反射吃掉 12%，每走 600px 再掉 10%。目标门槛很高——路要走短，镜子要少拐。',
+  'intro': '光会衰减：传播 600px 掉约 10%，每次镜面反射只剩 88%。能量不达标，颜色对了也不算点亮。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'walls': [{'a': {'x': 300, 'y': 60}, 'b': {'x': 300, 'y': 200}}],
+  'elements': [{'type': 'prism',
+                'cx': 260,
+                'cy': 310,
+                'angleDeg': 90,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 640,
+                'cy': 260,
+                'angleDeg': 195,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 460,
+                'cy': 360,
+                'angleDeg': 0,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 720,
+                'cy': 420,
+                'angleDeg': 30,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 900,
+                'cy': 340,
+                'angleDeg': 180,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 640,
+                'cy': 540,
+                'angleDeg': 300,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 930, 'y': 90, 'r': 20, 'required': 'R', 'polTol': 12, 'minPower': 0.321},
+              {'x': 930, 'y': 450, 'r': 20, 'required': 'G', 'polTol': 12, 'minPower': 0.366},
+              {'x': 930, 'y': 545, 'r': 20, 'required': 'B', 'polTol': 12, 'minPower': 0.32}],
+  'solution': [{'cx': 485.77, 'cy': 266.11, 'angleDeg': -24.4},
+               {'cx': 700, 'cy': 100, 'angleDeg': 159.86},
+               {'cx': 680, 'cy': 310, 'angleDeg': -165.38},
+               {'cx': 485.77, 'cy': 353.89, 'angleDeg': -148.97},
+               {'cx': 620, 'cy': 520, 'angleDeg': 27.84}],
+  'par': 0.363},
+ {'name': '第 6 关 · 禁区走廊',
+  'tag': '禁区 · 绕行',
+  'theme': 5,
+  'tip': '红色警戒圈碰不得，光擦到整关判负。直线走不通，必须用第二面镜绕过去。',
+  'intro': '禁区是绝对危险区：任何一束光碰到它，哪怕所有目标都亮着，也立刻判负。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'walls': [{'a': {'x': 500, 'y': 380}, 'b': {'x': 500, 'y': 620}}],
+  'alarms': [{'x': 695, 'y': 230, 'r': 38}, {'x': 620, 'y': 565, 'r': 40}],
+  'elements': [{'type': 'splitter',
+                'cx': 260,
+                'cy': 310,
+                'angleDeg': 45,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 840,
+                'cy': 420,
+                'angleDeg': 75,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 660,
+                'cy': 420,
+                'angleDeg': 150,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 460,
+                'cy': 240,
+                'angleDeg': 165,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 400,
+                'cy': 480,
+                'angleDeg': 330,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 930, 'y': 150, 'r': 22, 'required': 'ANY', 'polTol': 12, 'minPower': 0.26},
+              {'x': 760,
+               'y': 480,
+               'r': 22,
+               'required': 'ANY',
+               'polTol': 12,
+               'minPower': 0.251}],
+  'solution': [{'cx': 460, 'cy': 310, 'angleDeg': -17.92},
+               {'cx': 640, 'cy': 180, 'angleDeg': 159.13},
+               {'cx': 260, 'cy': 560, 'angleDeg': 17.41},
+               {'cx': 420, 'cy': 330, 'angleDeg': 164.32}],
+  'par': 0.322},
+ {'name': '第 7 关 · 偏振分色',
+  'tag': '色散 + 偏振',
+  'theme': 6,
+  'tip': '棱镜分出的绿光必须先过偏振片。红蓝随意，绿目标只收 75° 偏振的绿光。',
+  'intro': '色散与偏振叠加：先按颜色分开，再按偏振方向筛选——两道关卡同时生效。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'elements': [{'type': 'prism',
+                'cx': 280,
+                'cy': 310,
+                'angleDeg': 90,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 640,
+                'cy': 500,
+                'angleDeg': 30,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 840,
+                'cy': 300,
+                'angleDeg': 45,
+                'length': 110,
+                'movable': True},
+               {'type': 'polarizer',
+                'cx': 260,
+                'cy': 80,
+                'angleDeg': 165,
+                'length': 60,
+                'axisDeg': 75,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 360,
+                'cy': 180,
+                'angleDeg': 345,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 910, 'y': 90, 'r': 21, 'required': 'R', 'polTol': 12, 'minPower': 0.325},
+              {'x': 910,
+               'y': 440,
+               'r': 21,
+               'required': 'G',
+               'needPol': 75,
+               'polTol': 12,
+               'minPower': 0.157},
+              {'x': 910, 'y': 545, 'r': 21, 'required': 'B', 'polTol': 12, 'minPower': 0.325}],
+  'solution': [{'cx': 594.12, 'cy': 248.94, 'angleDeg': -18.86},
+               {'cx': 660, 'cy': 310, 'angleDeg': -166.26},
+               {'cx': 470, 'cy': 310, 'angleDeg': 90},
+               {'cx': 594.12, 'cy': 371.06, 'angleDeg': -160.08}],
+  'par': 0.201},
+ {'name': '第 8 关 · 透镜聚光',
+  'tag': '透镜 · 折射',
+  'theme': 7,
+  'tip': '凸透镜会把偏离光心的光掰向焦点。穿过透镜后光往哪走，得按薄透镜公式算出来再接。',
+  'intro': '薄透镜成像：m′ = m - y/f。偏离光心越远、焦距越短，光被弯折得越狠。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'elements': [{'type': 'splitter',
+                'cx': 260,
+                'cy': 310,
+                'angleDeg': 45,
+                'length': 110,
+                'fixed': True},
+               {'type': 'lens',
+                'cx': 500,
+                'cy': 220,
+                'angleDeg': 90,
+                'length': 260,
+                'focal': 220,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 260,
+                'cy': 180,
+                'angleDeg': 300,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 880,
+                'cy': 220,
+                'angleDeg': 135,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 930, 'y': 400, 'r': 22, 'required': 'ANY', 'polTol': 12, 'minPower': 0.269},
+              {'x': 700,
+               'y': 560,
+               'r': 22,
+               'required': 'ANY',
+               'polTol': 12,
+               'minPower': 0.299}],
+  'solution': [{'cx': 722.13, 'cy': 219.13, 'angleDeg': -170.61},
+               {'cx': 260, 'cy': 490, 'angleDeg': 49.52}],
+  'par': 0.345},
+ {'name': '第 9 关 · 双偏振',
+  'tag': '双路 · 偏振',
+  'theme': 8,
+  'tip': '两路各挂一片偏振片，轴向不同。两个目标各自只认自己那条路的偏振方向，能量还都要够。',
+  'intro': '两路独立起偏：30° 与 115°。每一路都必须同时满足「送到 + 偏振对 + 能量够」三件事。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'elements': [{'type': 'splitter',
+                'cx': 260,
+                'cy': 310,
+                'angleDeg': 45,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 640,
+                'cy': 520,
+                'angleDeg': 135,
+                'length': 110,
+                'movable': True},
+               {'type': 'polarizer',
+                'cx': 860,
+                'cy': 100,
+                'angleDeg': 270,
+                'length': 96,
+                'axisDeg': 30,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 720,
+                'cy': 280,
+                'angleDeg': 255,
+                'length': 110,
+                'movable': True},
+               {'type': 'polarizer',
+                'cx': 240,
+                'cy': 500,
+                'angleDeg': 150,
+                'length': 96,
+                'axisDeg': 115,
+                'movable': True}],
+  'targets': [{'x': 920,
+               'y': 180,
+               'r': 22,
+               'required': 'W',
+               'needPol': 30,
+               'polTol': 12,
+               'minPower': 0.142},
+              {'x': 820,
+               'y': 560,
+               'r': 22,
+               'required': 'W',
+               'needPol': 115,
+               'polTol': 12,
+               'minPower': 0.14}],
+  'solution': [{'cx': 540, 'cy': 310, 'angleDeg': -9.44},
+               {'cx': 400, 'cy': 310, 'angleDeg': 90},
+               {'cx': 260, 'cy': 510, 'angleDeg': 47.55},
+               {'cx': 260, 'cy': 410, 'angleDeg': 180}],
+  'par': 0.18},
+ {'name': '第 10 关 · 光之秩序',
+  'tag': '综合 · 终局',
+  'theme': 9,
+  'tip': '终局：色散 + 起偏 + 半波扭转 + 禁区 + 高能门槛。红路要算对偏振，三色必须同时达标。',
+  'intro': '所有机制同时上场。红路：20° 起偏 → 半波片快轴 70° → 出射 2×70 - 20 = 120°。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'alarms': [{'x': 430, 'y': 470, 'r': 42}],
+  'elements': [{'type': 'prism',
+                'cx': 260,
+                'cy': 310,
+                'angleDeg': 90,
+                'length': 110,
+                'fixed': True},
+               {'type': 'mirror',
+                'cx': 580,
+                'cy': 180,
+                'angleDeg': 135,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 640,
+                'cy': 500,
+                'angleDeg': 60,
+                'length': 110,
+                'movable': True},
+               {'type': 'polarizer',
+                'cx': 900,
+                'cy': 220,
+                'angleDeg': 225,
+                'length': 50,
+                'axisDeg': 20,
+                'movable': True},
+               {'type': 'waveplate',
+                'cx': 440,
+                'cy': 80,
+                'angleDeg': 315,
+                'length': 96,
+                'axisDeg': 70,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 320,
+                'cy': 400,
+                'angleDeg': 315,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 240,
+                'cy': 120,
+                'angleDeg': 60,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 540,
+                'cy': 400,
+                'angleDeg': 345,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 930,
+               'y': 90,
+               'r': 20,
+               'required': 'R',
+               'needPol': 120,
+               'polTol': 12,
+               'minPower': 0.139},
+              {'x': 930, 'y': 450, 'r': 20, 'required': 'G', 'polTol': 12, 'minPower': 0.341},
+              {'x': 930, 'y': 545, 'r': 20, 'required': 'B', 'polTol': 12, 'minPower': 0.298}],
+  'solution': [{'cx': 593.75, 'cy': 245.12, 'angleDeg': -32.4},
+               {'cx': 700, 'cy': 100, 'angleDeg': 151.86},
+               {'cx': 426.88, 'cy': 277.56, 'angleDeg': 79},
+               {'cx': 646.88, 'cy': 172.56, 'angleDeg': 36.21},
+               {'cx': 660, 'cy': 310, 'angleDeg': -166.3},
+               {'cx': 485.77, 'cy': 353.89, 'angleDeg': -148.97},
+               {'cx': 620, 'cy': 520, 'angleDeg': 27.84}],
+  'par': 0.169},
+ {'name': '第 11 关 · 越界传送',
+  'tag': '传送 + 滤色',
+  'theme': 10,
+  'tip': '一堵长墙把场地劈成两半，右半边只能靠传送门进去。红光目标在墙后——先滤色，再传送，最后拐上去。',
+  'intro': '传送门成对存在：光从一端进、另一端沿原方向射出，可穿越任何墙体。滤色片只放行与自己同色的分量，其余全部吸收。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'walls': [{'a': {'x': 700, 'y': 0}, 'b': {'x': 700, 'y': 620}}],
+  'alarms': [{'x': 430, 'y': 545, 'r': 42}, {'x': 500, 'y': 430, 'r': 40}],
+  'elements': [{'type': 'splitter',
+                'cx': 240,
+                'cy': 310,
+                'angleDeg': 45,
+                'length': 110,
+                'fixed': True},
+               {'type': 'filter',
+                'cx': 660,
+                'cy': 160,
+                'angleDeg': 15,
+                'length': 60,
+                'color': 'R',
+                'movable': True},
+               {'type': 'portal',
+                'cx': 80,
+                'cy': 480,
+                'angleDeg': 255,
+                'length': 60,
+                'portalId': 1,
+                'movable': True},
+               {'type': 'portal',
+                'cx': 560,
+                'cy': 220,
+                'angleDeg': 180,
+                'length': 60,
+                'portalId': 1,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 440,
+                'cy': 340,
+                'angleDeg': 135,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 440,
+                'cy': 220,
+                'angleDeg': 315,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 200,
+                'cy': 520,
+                'angleDeg': 285,
+                'length': 110,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 740,
+                'cy': 260,
+                'angleDeg': 195,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 890, 'y': 180, 'r': 22, 'required': 'R', 'polTol': 12, 'minPower': 0.284},
+              {'x': 620, 'y': 380, 'r': 22, 'required': 'ANY', 'polTol': 12, 'minPower': 0.27}],
+  'solution': [{'cx': 380, 'cy': 310, 'angleDeg': 90},
+               {'cx': 600, 'cy': 310, 'angleDeg': 90},
+               {'cx': 780, 'cy': 480, 'angleDeg': 90},
+               {'cx': 890, 'cy': 480, 'angleDeg': -45},
+               {'cx': 240, 'cy': 545, 'angleDeg': 45},
+               {'cx': 330, 'cy': 545, 'angleDeg': -45},
+               {'cx': 330, 'cy': 380, 'angleDeg': 135}],
+  'par': 0.291},
+ {'name': '第 12 关 · 光之终章',
+  'tag': '终章 · 全机制',
+  'theme': 11,
+  'tip': '终局：棱镜分出的三色各走各的路。红路要算偏振，绿路必须滤色后越墙传送，蓝路要在撞墙前拐弯。',
+  'intro': '三色分头行动：红路 15° 起偏 → 快轴 60° 的半波片 → 出射 2×60 - 15 = 105°；绿路先滤成纯绿再走传送门；蓝路必须在撞上横墙前转向。',
+  'source': {'x': 60, 'y': 310, 'angleDeg': 0, 'color': 'W', 'pol': None},
+  'walls': [{'a': {'x': 560, 'y': 400}, 'b': {'x': 980, 'y': 400}}],
+  'alarms': [{'x': 640, 'y': 430, 'r': 38}, {'x': 500, 'y': 420, 'r': 40}],
+  'elements': [{'type': 'prism',
+                'cx': 240,
+                'cy': 310,
+                'angleDeg': 90,
+                'length': 110,
+                'fixed': True},
+               {'type': 'polarizer',
+                'cx': 300,
+                'cy': 520,
+                'angleDeg': 150,
+                'length': 60,
+                'axisDeg': 15,
+                'movable': True},
+               {'type': 'waveplate',
+                'cx': 180,
+                'cy': 180,
+                'angleDeg': 0,
+                'length': 96,
+                'axisDeg': 60,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 380,
+                'cy': 440,
+                'angleDeg': 300,
+                'length': 110,
+                'movable': True},
+               {'type': 'filter',
+                'cx': 480,
+                'cy': 220,
+                'angleDeg': 255,
+                'length': 60,
+                'color': 'G',
+                'movable': True},
+               {'type': 'portal',
+                'cx': 600,
+                'cy': 100,
+                'angleDeg': 90,
+                'length': 60,
+                'portalId': 1,
+                'movable': True},
+               {'type': 'portal',
+                'cx': 480,
+                'cy': 540,
+                'angleDeg': 90,
+                'length': 60,
+                'portalId': 1,
+                'movable': True},
+               {'type': 'mirror',
+                'cx': 720,
+                'cy': 340,
+                'angleDeg': 150,
+                'length': 110,
+                'movable': True}],
+  'targets': [{'x': 900,
+               'y': 120,
+               'r': 21,
+               'required': 'R',
+               'needPol': 105,
+               'polTol': 12,
+               'minPower': 0.181},
+              {'x': 900, 'y': 520, 'r': 22, 'required': 'G', 'polTol': 12, 'minPower': 0.369},
+              {'x': 900, 'y': 372, 'r': 21, 'required': 'B', 'polTol': 12, 'minPower': 0.391}],
+  'solution': [{'cx': 420, 'cy': 275, 'angleDeg': 79},
+               {'cx': 540, 'cy': 252, 'angleDeg': 79},
+               {'cx': 700, 'cy': 221, 'angleDeg': -18.897},
+               {'cx': 600, 'cy': 310, 'angleDeg': 90},
+               {'cx': 660, 'cy': 310, 'angleDeg': 90},
+               {'cx': 780, 'cy': 520, 'angleDeg': 90},
+               {'cx': 560, 'cy': 372, 'angleDeg': 5.5}],
+  'par': 0.195}]
+
+
+# ============================================================ 光学内核
+
+
+# ---------------------------------------------------------------- 向量
+
+def add(a, b):
+    return (a[0] + b[0], a[1] + b[1])
+
+
+def sub(a, b):
+    return (a[0] - b[0], a[1] - b[1])
+
+
+def scale(a, s):
+    return (a[0] * s, a[1] * s)
+
+
+def dot(a, b):
+    return a[0] * b[0] + a[1] * b[1]
+
+
+def cross(a, b):
+    return a[0] * b[1] - a[1] * b[0]
+
+
+def norm(a):
+    l = math.hypot(a[0], a[1]) or 1.0
+    return (a[0] / l, a[1] / l)
+
+
+def rotate(v, ang):
+    c, s = math.cos(ang), math.sin(ang)
+    return (v[0] * c - v[1] * s, v[0] * s + v[1] * c)
+
+
+def from_deg(d):
+    r = math.radians(d)
+    return (math.cos(r), math.sin(r))
+
+
+def to_deg(v):
+    return math.degrees(math.atan2(v[1], v[0]))
+
+
+def reflect(d, n):
+    """反射定律 r = d - 2(d·n)n"""
+    k = 2 * dot(d, n)
+    return norm((d[0] - k * n[0], d[1] - k * n[1]))
+
+
+def ray_seg(ro, rd, a, b):
+    """射线与线段求交，返回 (t, 交点, 法线) 或 None"""
+    v1, v2 = sub(ro, a), sub(b, a)
+    den = cross(rd, v2)
+    if abs(den) < 1e-9:
+        return None
+    t = -cross(v1, v2) / den
+    u = -cross(v1, rd) / den
+    if t > 1e-6 and 0 <= u <= 1:
+        p = add(ro, scale(rd, t))
+        return t, p, norm((-v2[1], v2[0]))
+    return None
+
+
+def ray_circle(ro, rd, c, r):
+    """射线与圆求交，返回最近正 t 或 None"""
+    oc = sub(ro, c)
+    b = dot(oc, rd)
+    cc = dot(oc, oc) - r * r
+    disc = b * b - cc
+    if disc < 0:
+        return None
+    s = math.sqrt(disc)
+    t = -b - s
+    if t < 1e-6:
+        t = -b + s
+    return t if t > 1e-6 else None
+
+
+def dist_to_seg(p, a, b):
+    """点到线段的距离"""
+    ab, ap = sub(b, a), sub(p, a)
+    den = dot(ab, ab) or 1.0
+    t = max(0.0, min(1.0, dot(ap, ab) / den))
+    proj = add(a, scale(ab, t))
+    return math.hypot(p[0] - proj[0], p[1] - proj[1])
+
+
+def mirror_ends(el):
+    """元件中心 + 角度 + 长度 → 两端点"""
+    d = from_deg(el.get('angleDeg', 0))
+    h = (el.get('length') or 110) / 2.0
+    c = (el['cx'], el['cy'])
+    return sub(c, scale(d, h)), add(c, scale(d, h))
+
+
+def mirror_angle_for(din, dout):
+    """已知入射方向和期望出射方向，求镜面摆放角（度）"""
+    n = norm(sub(dout, din))
+    return to_deg((-n[1], n[0]))
+
+
+# ---------------------------------------------------------------- 颜色
+
+class Color:
+    R, G, B, W = 1, 2, 4, 7
+    _MASK = {'R': 1, 'G': 2, 'B': 4, 'Y': 3, 'M': 5, 'C': 6, 'W': 7}
+    _NAME = {1: '红', 2: '绿', 4: '蓝', 3: '黄', 5: '品红', 6: '青', 7: '白', 0: '任意'}
+    _CHAR = {1: 'R', 2: 'G', 4: 'B', 3: 'Y', 5: 'M', 6: 'C', 7: 'W', 0: '?'}
+
+    @staticmethod
+    def mask(c):
+        return Color._MASK.get(c, 7)
+
+    @staticmethod
+    def name(m):
+        return Color._NAME.get(m, '任意')
+
+    @staticmethod
+    def char(m):
+        return Color._CHAR.get(m, '?')
+
+
+# ---------------------------------------------------------------- 偏振
+
+class Pol:
+    @staticmethod
+    def wrap(deg):
+        """归一化到 [0, 180)"""
+        return (deg % 180 + 180) % 180
+
+    @staticmethod
+    def diff(a, b):
+        """两个偏振方向的夹角，0~90"""
+        d = Pol.wrap(a - b)
+        return min(d, 180 - d)
+
+    @staticmethod
+    def match(a, b, tol=12):
+        """目标无偏振要求则谁都行；光未起偏而目标有要求则不合格"""
+        if b is None:
+            return True
+        if a is None:
+            return False
+        return Pol.diff(a, b) <= tol
+
+
+# ---------------------------------------------------------------- 追踪
+
+LOSS = {
+    'mirror': 0.88, 'splitter': 0.50, 'prismSplit': 0.55, 'prismPass': 0.90,
+    'filter': 0.85, 'portal': 0.95, 'lens': 0.92,
+    'polarizer': 0.96, 'waveplate': 0.97,
+}
+ATTEN_PER_PX = 1.0 / 6000
+DEFAULT_MIN_POWER = 0.10
+
+
+def trace_light(source, elements, walls, targets, alarms):
+    """追踪全部光束，返回判定结果。
+
+    通关条件（全部同时满足）：
+      1. 每个目标都被点亮（颜色严格匹配 + 能量达标 + 偏振合格）
+      2. 没有任何一束光碰到禁区
+      3. 每一个可动元件都真正参与了光路
+    """
+    walls = walls or []
+    targets = targets or []
+    alarms = alarms or []
+
+    segs = [{'a': (w['a']['x'], w['a']['y']), 'b': (w['b']['x'], w['b']['y']),
+             'type': 'wall', 'idx': -1} for w in walls]
+    for i, el in enumerate(elements):
+        a, b = mirror_ends(el)
+        segs.append({'a': a, 'b': b, 'type': el['type'], 'idx': i})
+
+    nT = len(targets)
+    hit_tot = [{1: 0.0, 2: 0.0, 4: 0.0} for _ in range(nT)]   # 到达的总能量
+    hit_ok = [{1: 0.0, 2: 0.0, 4: 0.0} for _ in range(nT)]    # 颜色 + 偏振都合格的能量
+    got_pol = [{1: None, 2: None, 4: None} for _ in range(nT)]
+    best_arr = [0.0] * nT
+    got_mask = [0] * nT
+    paths = []
+    used = set()
+    events = [[] for _ in elements]
+
+    def rec(idx, ev):
+        if 0 <= idx < len(events):
+            events[idx].append(ev)
+
+    def atten(d):
+        return max(0.55, 1 - d * ATTEN_PER_PX)
+
+    queue = [{
+        'ro': (source['x'], source['y']),
+        'rd': norm(from_deg(source.get('angleDeg', 0))),
+        'color': Color.mask(source.get('color', 'W')),
+        'power': 1.0,
+        'pol': None if source.get('pol') is None else Pol.wrap(source['pol']),
+    }]
+
+    guard = 0
+    while queue and guard < 900:
+        guard += 1
+        beam = queue.pop(0)
+        ro, rd = beam['ro'], beam['rd']
+        color, power, pol = beam['color'], beam['power'], beam['pol']
+        pts = [ro]
+        powers = [power]
+        pols = [pol]
+        idx_list = []
+        bounces = 0
+
+        while bounces < 60:
+            bounces += 1
+            best_t, best_p, best_n, best_type, best_idx = float('inf'), None, None, None, -1
+            for s in segs:
+                h = ray_seg(ro, rd, s['a'], s['b'])
+                if h and h[0] < best_t:
+                    best_t, best_p, best_n = h[0], h[1], h[2]
+                    best_type, best_idx = s['type'], s['idx']
+
+            t_hit, t_t = -1, float('inf')
+            for ti, tg in enumerate(targets):
+                tc = ray_circle(ro, rd, (tg['x'], tg['y']), tg['r'])
+                if tc is not None and tc < t_t:
+                    t_t, t_hit = tc, ti
+
+            if t_hit >= 0 and t_t < best_t:
+                arrive = power * atten(t_t)
+                pts.append(add(ro, scale(rd, t_t)))
+                tg = targets[t_hit]
+                need_pol = None if tg.get('needPol') is None else Pol.wrap(tg['needPol'])
+                tol = tg.get('polTol', 12)
+                need_c = 0 if tg.get('required') == 'ANY' else Color.mask(tg.get('required'))
+                color_ok = (need_c == 0) or (color == need_c)
+                ok = color_ok and Pol.match(pol, need_pol, tol)
+                if arrive > best_arr[t_hit]:
+                    best_arr[t_hit] = arrive
+                    got_mask[t_hit] = color
+                for m in (1, 2, 4):
+                    if not (color & m):
+                        continue
+                    cur = got_pol[t_hit][m]
+                    if cur is None or arrive > hit_tot[t_hit][m]:
+                        got_pol[t_hit][m] = pol
+                    hit_tot[t_hit][m] += arrive
+                    if ok:
+                        hit_ok[t_hit][m] += arrive
+                break
+
+            if best_type is None:
+                pts.append(add(ro, scale(rd, 2600)))
+                break
+
+            pts.append(best_p)
+            power *= atten(best_t)
+            if best_idx >= 0:
+                used.add(best_idx)
+                idx_list.append(best_idx)
+
+            if best_type == 'wall':
+                break
+
+            p_in, d_in, c_in, pol_in = power, rd, color, pol
+
+            def done(kind, **extra):
+                ev = {'kind': kind, 'at': best_p, 'inDir': d_in, 'inColor': c_in,
+                      'inPower': p_in, 'inPol': pol_in,
+                      'outColor': color, 'outPower': power, 'outPol': pol}
+                ev.update(extra)
+                return ev
+
+            if best_type == 'mirror':
+                power *= LOSS['mirror']
+                rd = reflect(rd, best_n)
+                rec(best_idx, done('reflect', outDir=rd))
+                ro = add(best_p, scale(rd, 0.1))
+                powers.append(power)
+                pols.append(pol)
+                continue
+
+            if best_type == 'splitter':
+                rrd = reflect(rd, best_n)
+                half = power * LOSS['splitter']
+                rec(best_idx, done('split', outDir=rd, outPower=half))
+                queue.append({'ro': add(best_p, scale(rd, 0.1)), 'rd': rd,
+                              'color': color, 'power': half, 'pol': pol})
+                queue.append({'ro': add(best_p, scale(rrd, 0.1)), 'rd': rrd,
+                              'color': color, 'power': half, 'pol': pol})
+                break
+
+            if best_type == 'prism':
+                if color == 7:
+                    da = math.radians(11)
+                    rec(best_idx, done('disperse', outDir=rd,
+                                       outPower=power * LOSS['prismSplit'], outColor=7))
+                    for c, off in ((1, -da), (2, 0.0), (4, da)):
+                        nd = rotate(rd, off)
+                        queue.append({'ro': add(best_p, scale(nd, 0.1)), 'rd': nd,
+                                      'color': c, 'power': power * LOSS['prismSplit'], 'pol': pol})
+                    break
+                else:
+                    power *= LOSS['prismPass']
+                    rec(best_idx, done('pass', outDir=rd))
+                    ro = add(best_p, scale(rd, 0.1))
+                    powers.append(power)
+                    pols.append(pol)
+                    continue
+
+            if best_type == 'filter':
+                fc = Color.mask(elements[best_idx].get('color', 'R'))
+                if not (color & fc):
+                    rec(best_idx, done('blocked', blocked=True, outColor=0, outPower=0))
+                    break
+                power *= LOSS['filter']
+                color = fc
+                rec(best_idx, done('color', outDir=rd))
+                ro = add(best_p, scale(rd, 0.1))
+                powers.append(power)
+                pols.append(pol)
+                continue
+
+            if best_type == 'portal':
+                me = elements[best_idx]
+                p_idx = -1
+                for i, el in enumerate(elements):
+                    if i != best_idx and el['type'] == 'portal' and el.get('portalId') == me.get('portalId'):
+                        p_idx = i
+                        break
+                if p_idx < 0:
+                    ro = add(best_p, scale(rd, 0.1))
+                    powers.append(power)
+                    pols.append(pol)
+                    continue
+                partner = elements[p_idx]
+                pa, pb = mirror_ends(partner)
+                pc = ((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2)
+                used.add(p_idx)
+                idx_list.append(p_idx)
+                power *= LOSS['portal']
+                rec(best_idx, done('teleport', outDir=rd, partner=p_idx))
+                rec(p_idx, {'kind': 'emit', 'at': pc, 'inDir': rd, 'outDir': rd,
+                            'inColor': color, 'outColor': color,
+                            'inPower': power, 'outPower': power,
+                            'inPol': pol, 'outPol': pol})
+                ro = add(pc, scale(rd, (partner.get('length') or 110) / 2 + 1))
+                powers.append(power)
+                pols.append(pol)
+                continue
+
+            if best_type == 'lens':
+                el = elements[best_idx]
+                f = el.get('focal') or 200
+                center = (el['cx'], el['cy'])
+                s = 1 if dot(rd, best_n) >= 0 else -1
+                A = scale(best_n, s)
+                Hv = (-A[1], A[0])
+                dA = dot(rd, A)
+                if abs(dA) < 1e-6:
+                    ro = add(best_p, scale(rd, 0.1))
+                    powers.append(power)
+                    pols.append(pol)
+                    continue
+                yh = dot(sub(best_p, center), Hv)
+                m = dot(rd, Hv) / dA
+                nd = norm((A[0] + Hv[0] * (m - yh / f), A[1] + Hv[1] * (m - yh / f)))
+                power *= LOSS['lens']
+                rd = nd
+                rec(best_idx, done('focus', outDir=rd))
+                ro = add(best_p, scale(nd, 0.1))
+                powers.append(power)
+                pols.append(pol)
+                continue
+
+            if best_type == 'polarizer':
+                axis = Pol.wrap(elements[best_idx].get('axisDeg', 0))
+                if pol is None:                       # 自然光起偏：能量减半
+                    power *= LOSS['polarizer'] * 0.5
+                    pol = axis
+                else:                                 # 马吕斯定律 I' = I·cos^2(θ - 轴)
+                    c = math.cos(math.radians(pol - axis))
+                    power *= LOSS['polarizer'] * c * c
+                    pol = axis
+                rec(best_idx, done('polarize', outDir=rd, axis=axis))
+                ro = add(best_p, scale(rd, 0.1))
+                powers.append(power)
+                pols.append(pol)
+                continue
+
+            if best_type == 'waveplate':
+                fast = Pol.wrap(elements[best_idx].get('axisDeg', 0))
+                if pol is not None:                   # θ' = 2·快轴 - θ
+                    pol = Pol.wrap(2 * fast - pol)
+                    power *= LOSS['waveplate']
+                rec(best_idx, done('rotate', outDir=rd, axis=fast))
+                ro = add(best_p, scale(rd, 0.1))
+                powers.append(power)
+                pols.append(pol)
+                continue
+
+            break
+
+        paths.append({'pts': pts, 'color': color, 'powers': powers,
+                      'pols': pols, 'idxList': idx_list})
+
+    # 禁区：任一束光擦到即判负
+    alarmed = False
+    if alarms:
+        for p in paths:
+            for i in range(len(p['pts']) - 1):
+                for z in alarms:
+                    if dist_to_seg((z['x'], z['y']), p['pts'][i], p['pts'][i + 1]) <= z['r']:
+                        alarmed = True
+                        break
+                if alarmed:
+                    break
+            if alarmed:
+                break
+
+    # 逐目标判定
+    detail = []
+    for i, t in enumerate(targets):
+        thr = t.get('minPower') if t.get('minPower') is not None else DEFAULT_MIN_POWER
+        need = 0 if t.get('required') == 'ANY' else Color.mask(t.get('required'))
+        need_pol = None if t.get('needPol') is None else Pol.wrap(t['needPol'])
+        if need == 0:
+            v = max(hit_ok[i][1], hit_ok[i][2], hit_ok[i][4])
+            vt = max(hit_tot[i][1], hit_tot[i][2], hit_tot[i][4])
+            detail.append({'lit': v >= thr, 'got': v, 'gotTot': vt, 'thr': thr,
+                           'need': 0, 'needPol': need_pol, 'gotPol': None,
+                           'colorOK': True, 'gotMask': got_mask[i], 'comps': [1, 2, 4]})
+            continue
+        comps = [m for m in (1, 2, 4) if need & m]
+        vals = [hit_ok[i][m] for m in comps]
+        tots = [hit_tot[i][m] for m in comps]
+        detail.append({
+            'lit': all(x >= thr for x in vals),
+            'got': min(vals) if vals else 0.0,
+            'gotTot': min(tots) if tots else 0.0,
+            'thr': thr, 'need': need, 'needPol': need_pol,
+            'gotPol': [got_pol[i][m] for m in comps],
+            'colorOK': got_mask[i] == need,
+            'gotMask': got_mask[i], 'comps': comps,
+        })
+    lit = [d['lit'] for d in detail]
+
+    eff = 1.0
+    for d in detail:
+        eff = min(eff, d['got'])
+
+    movable = []
+    for i, el in enumerate(elements):
+        is_mov = el['movable'] if el.get('movable') is not None else (not el.get('fixed'))
+        if is_mov:
+            movable.append({'idx': i, 'used': i in used})
+    activated = sum(1 for m in movable if m['used'])
+
+    won = (not alarmed) and all(lit) and activated >= len(movable) and len(movable) > 0
+
+    bounces = 0
+    path_len = 0.0
+    for p in paths:
+        bounces += max(0, len(p['pts']) - 2)
+        for i in range(len(p['pts']) - 1):
+            path_len += math.hypot(p['pts'][i + 1][0] - p['pts'][i][0],
+                                   p['pts'][i + 1][1] - p['pts'][i][1])
+
+    return {'paths': paths, 'detail': detail, 'lit': lit, 'won': won,
+            'alarmed': alarmed, 'eff': eff, 'activated': activated,
+            'movableTotal': len(movable), 'movable': movable, 'events': events,
+            'bounces': bounces, 'pathLen': path_len}
+
+
+# ============================================================ ASCII 棋盘渲染
+
+
+
+WORLD_W, WORLD_H = 1000.0, 640.0
+
+
+def _size(want_cols=None):
+    """按终端宽度自适应；窄了不会折行"""
+    if want_cols:
+        cols = want_cols
+    else:
+        try:
+            cols = shutil.get_terminal_size((100, 30)).columns - 4
+        except Exception:
+            cols = 100
+        cols = max(60, min(100, cols))
+    return cols, max(18, int(round(cols * 0.32)))
+
+
+COLS, ROWS = _size()
+
+# 元件类型 → 显示字符 / 中文名
+PART_CHAR = {
+    'mirror': '-', 'splitter': 'S', 'prism': 'D', 'filter': 'F',
+    'polarizer': 'A', 'waveplate': 'H', 'lens': 'O', 'portal': 'T',
+}
+PART_NAME = {
+    'mirror': '镜子', 'splitter': '分光镜', 'prism': '棱镜', 'filter': '滤色片',
+    'polarizer': '偏振片', 'waveplate': '半波片', 'lens': '凸透镜', 'portal': '传送门',
+}
+
+
+def _col(x):
+    return max(0, min(COLS - 1, int(x / WORLD_W * COLS)))
+
+
+def _row(y):
+    return max(0, min(ROWS - 1, int(y / WORLD_H * ROWS)))
+
+
+def _angle_char(deg):
+    """镜子按摆放角度选字符（注意屏幕 y 轴向下）"""
+    a = deg % 180
+    if a < 22.5 or a >= 157.5:
+        return '-'
+    if a < 67.5:
+        return '\\'
+    if a < 112.5:
+        return '|'
+    return '/'
+
+
+def _plot(grid, p, ch, force=False):
+    c, r = _col(p[0]), _row(p[1])
+    if force or grid[r][c] == ' ':
+        grid[r][c] = ch
+
+
+def _plot_seg(grid, a, b, ch, force=False):
+    steps = int(max(abs(b[0] - a[0]), abs(b[1] - a[1])) / 2) + 1
+    for i in range(steps + 1):
+        t = i / steps
+        _plot(grid, (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), ch, force)
+
+
+def _plot_circle(grid, c, r_world, ch, force=False):
+    for i in range(48):
+        ang = 2 * math.pi * i / 48
+        _plot(grid, (c[0] + r_world * math.cos(ang), c[1] + r_world * math.sin(ang)), ch, force)
+
+
+def render(level, elements, result):
+    """返回字符画字符串"""
+    grid = [[' '] * COLS for _ in range(ROWS)]
+
+    # 1. 光路（画在最底层）
+    for p in result['paths']:
+        ch = Color.char(p['color'])
+        for i in range(len(p['pts']) - 1):
+            _plot_seg(grid, p['pts'][i], p['pts'][i + 1], ch)
+
+    # 2. 墙
+    for w in level.get('walls') or []:
+        a = (w['a']['x'], w['a']['y'])
+        b = (w['b']['x'], w['b']['y'])
+        _plot_seg(grid, a, b, '#', force=True)
+
+    # 3. 禁区
+    for z in level.get('alarms') or []:
+        mark = 'X' if result['alarmed'] else 'x'
+        _plot_circle(grid, (z['x'], z['y']), z['r'], mark, force=True)
+
+    # 4. 元件
+    for i, el in enumerate(elements):
+        a, b = mirror_ends(el)
+        ch = _angle_char(el.get('angleDeg', 0)) if el['type'] == 'mirror' else PART_CHAR.get(el['type'], '?')
+        if el.get('movable'):
+            ch = ch  # 可动元件用小写/符号区分不开，改为在清单里标编号
+        _plot_seg(grid, a, b, ch, force=True)
+
+    # 5. 目标（未亮 (n) / 已亮 [n]）
+    for i, t in enumerate(level.get('targets') or []):
+        lit = result['lit'][i]
+        txt = '[%d]' % (i + 1) if lit else '(%d)' % (i + 1)
+        r = _row(t['y'])
+        c = _col(t['x']) - 1
+        for k, chx in enumerate(txt):
+            cc = c + k
+            if 0 <= cc < COLS:
+                grid[r][cc] = chx
+
+    # 6. 光源
+    src = level['source']
+    _plot(grid, (src['x'], src['y']), '@', force=True)
+
+    top = '+' + '-' * COLS + '+'
+    body = ['|' + ''.join(row) + '|' for row in grid]
+    return '\n'.join([top] + body + [top])
+
+
+def legend():
+    return ('字符含义： @ 光源   # 墙   x 禁区(碰不得)   (1) 目标未亮   [1] 目标已亮\n'
+            '          - \\ | / 镜子   S 分光镜   D 棱镜   F 滤色片   A 偏振片\n'
+            '          H 半波片   O 凸透镜   T 传送门\n'
+            '光路颜色： R 红  G 绿  B 蓝  Y 黄  C 青  M 品红  W 白')
+
+
+# ============================================================ 交互主循环
+
+
+
+
+def clear():
+    print('\n' + '=' * 78 + '\n')
+
+
+class Game:
+    def __init__(self):
+        self.idx = 0
+        self.hints = 0
+        self.steps = 0
+        self.load(0)
+
+    # ------------------------------------------------------------ 关卡
+
+    def load(self, i):
+        n = len(LEVELS)
+        self.idx = max(0, min(n - 1, i))
+        self.level = LEVELS[self.idx]
+        self.elements = copy.deepcopy(self.level.get('elements') or [])
+        self.steps = 0
+        self.won = False
+        return self.level
+
+    def movable(self):
+        """返回 [(编号, 元件字典, 在 elements 里的下标)]，编号从 1 开始"""
+        out = []
+        k = 0
+        for i, el in enumerate(self.elements):
+            is_mov = el['movable'] if el.get('movable') is not None else (not el.get('fixed'))
+            if is_mov:
+                k += 1
+                out.append((k, el, i))
+        return out
+
+    def trace(self):
+        lv = self.level
+        return trace_light(
+            lv['source'], self.elements,
+            lv.get('walls'), lv.get('targets'), lv.get('alarms'))
+
+    # ------------------------------------------------------------ 输出
+
+    def header(self):
+        lv = self.level
+        print('  LightMaze 第 %d / %d 关 · %s' % (self.idx + 1, len(LEVELS), lv['name']))
+        print('  ' + (lv.get('tag') or ''))
+        if lv.get('intro'):
+            print('  ' + lv['intro'])
+
+    def board(self, res):
+        print(render(self.level, self.elements, res))
+        print(legend())
+
+    def conditions(self, res):
+        print('  ── 通关条件 ──')
+        for i, d in enumerate(res['detail']):
+            t = self.level['targets'][i]
+            pct = int(round(d['got'] * 100))
+            thr = int(round(d['thr'] * 100))
+            need = '任意光' if d['need'] == 0 else Color.name(d['need']) + '光'
+            if d['lit']:
+                mark, why = '[OK]', '已点亮'
+            else:
+                mark, why = '[  ]', self.diagnose(d)
+            pol = ''
+            if d['needPol'] is not None:
+                got = d['gotPol'][0] if d['gotPol'] else None
+                pol = '  偏振 %s/需 %d°' % (
+                    ('%d°' % round(Pol.wrap(got))) if got is not None else '未起偏',
+                    round(d['needPol']))
+            print('   %s 目标 %d  %s  能量 %d%%/需 %d%%%s   %s'
+                  % (mark, i + 1, need, pct, thr, pol, why))
+
+        tot = res['movableTotal']
+        ok = res['activated'] >= tot and tot > 0
+        print('   %s 可动元件 %d/%d 已参与光路' % ('[OK]' if ok else '[  ]', res['activated'], tot))
+        if res['alarmed']:
+            print('   [XX] 有光束碰到禁区 —— 立刻判负')
+
+    def diagnose(self, d):
+        """按优先级说出卡在哪一步"""
+        if d['gotTot'] <= 1e-6:
+            return '光还没到达'
+        if not d['colorOK']:
+            arrived = Color.name(d['gotMask']) if d['gotMask'] else '杂色'
+            need = '任意' if d['need'] == 0 else Color.name(d['need'])
+            return '颜色不对（到的是%s光，要%s光）' % (arrived, need)
+        if d['needPol'] is not None:
+            got = d['gotPol'][0] if d['gotPol'] else None
+            if got is None or not Pol.match(got, d['needPol']):
+                if got is None:
+                    return '光还没起偏（先让它过偏振片）'
+                diff = round(Pol.diff(got, d['needPol']))
+                return '偏振差 %d°（要压到 12° 内）' % diff
+        if d['got'] < d['thr']:
+            return '能量还差 %d 个百分点' % int(round((d['thr'] - d['got']) * 100))
+        return '尚未满足'
+
+    def parts(self, res):
+        print('  ── 可动元件 ──')
+        used = {m['idx'] for m in res['movable'] if m['used']}
+        for k, el, i in self.movable():
+            tag = 'OK 在光路上' if i in used else '-- 还没用到'
+            line = '   %d  %s  位置(%d,%d)  角度 %s°' % (
+                k, PART_NAME.get(el['type'], el['type']),
+                el['cx'], el['cy'], round(el.get('angleDeg', 0), 1))
+            if el.get('axisDeg') is not None:
+                line += '  轴/快轴 %s°' % round(el['axisDeg'], 1)
+            if el.get('color'):
+                line += '  颜色 %s' % Color.name(Color.mask(el['color']))
+            print(line + '   ' + tag)
+        fixed = [(i, el) for i, el in enumerate(self.elements)
+                 if not (el['movable'] if el.get('movable') is not None else (not el.get('fixed')))]
+        if fixed:
+            print('  固定件：' + '、'.join(
+                '%s(%d,%d)' % (PART_NAME.get(el['type'], el['type']), el['cx'], el['cy'])
+                for _, el in fixed))
+
+    def show(self, full=True):
+        clear()
+        res = self.trace()
+        self.header()
+        print()
+        self.board(res)
+        print()
+        self.conditions(res)
+        print()
+        self.parts(res)
+        print()
+        if res['won'] and not self.won:
+            self.won = True
+            print('  >>> 通关！用 %d 步，效率 %d%%' % (self.steps, int(round(res['eff'] * 100))))
+            print('      输入 n 进入下一关，或继续调整研究光路')
+        print('  ' + '─' * 74)
+        print('  rot 编号 角度 | pos 编号 x y | axis 编号 角度 | list | sol | auto | reset | n | b | q')
+        return res
+
+    # ------------------------------------------------------------ 指令
+
+    def run(self):
+        print('=' * 78)
+        print('   LightMaze · 偏振光路解谜（Python 控制台版）')
+        print('   输入 help 看全部指令，输入 q 退出')
+        print('=' * 78)
+        self.show()
+        while True:
+            try:
+                raw = input('\n  指令 > ').strip()
+            except (EOFError, KeyboardInterrupt):
+                print('\n  再见。')
+                return
+            if not raw:
+                self.show()
+                continue
+            cmd = raw.split()
+            op = cmd[0].lower()
+            try:
+                if op in ('q', 'quit', 'exit'):
+                    print('  再见。')
+                    return
+                elif op in ('h', 'help'):
+                    self.help()
+                elif op in ('l', 'list'):
+                    self.parts(self.trace())
+                elif op in ('rot', 'r'):
+                    self.cmd_rot(cmd[1:])
+                elif op in ('pos', 'm', 'move'):
+                    self.cmd_pos(cmd[1:])
+                elif op in ('axis', 'a'):
+                    self.cmd_axis(cmd[1:])
+                elif op == 'sol':
+                    self.cmd_sol()
+                elif op == 'auto':
+                    self.cmd_auto()
+                elif op in ('reset', 'x'):
+                    self.load(self.idx)
+                    self.show()
+                elif op in ('n', 'next'):
+                    self.load(self.idx + 1)
+                    self.show()
+                elif op in ('b', 'prev', 'back'):
+                    self.load(self.idx - 1)
+                    self.show()
+                elif op == 'go':
+                    self.load(int(cmd[1]) - 1)
+                    self.show()
+                else:
+                    print('  没这个指令：%s（输入 help 看全部）' % op)
+            except (ValueError, IndexError):
+                print('  参数不对，格式见 help')
+
+    def pick(self, arg):
+        k = int(arg)
+        for num, el, i in self.movable():
+            if num == k:
+                return el
+        raise ValueError('没有 %d 号元件（输入 list 看编号）' % k)
+
+    def cmd_rot(self, args):
+        el = self.pick(args[0])
+        v = args[1]
+        if v.startswith('+') or v.startswith('-'):
+            el['angleDeg'] = el.get('angleDeg', 0) + float(v)
+        else:
+            el['angleDeg'] = float(v)
+        self.steps += 1
+        self.show()
+
+    def cmd_pos(self, args):
+        el = self.pick(args[0])
+        el['cx'], el['cy'] = float(args[1]), float(args[2])
+        self.steps += 1
+        self.show()
+
+    def cmd_axis(self, args):
+        el = self.pick(args[0])
+        if el.get('axisDeg') is None:
+            print('  %s 没有轴向可调（只有偏振片和半波片有）'
+                  % PART_NAME.get(el['type'], el['type']))
+            return
+        el['axisDeg'] = float(args[1])
+        self.steps += 1
+        self.show()
+
+    def cmd_sol(self):
+        sol = self.level.get('solution') or []
+        self.hints += 1
+        print('  标准解（已用提示 %d 次）：' % self.hints)
+        for k, (num, el, i) in enumerate(self.movable()):
+            if k < len(sol):
+                s = sol[k]
+                print('    %d 号 → 位置(%d,%d)  角度 %s°'
+                      % (num, round(s['cx']), round(s['cy']), round(s['angleDeg'], 1)))
+
+    def cmd_auto(self):
+        sol = self.level.get('solution') or []
+        for k, (num, el, i) in enumerate(self.movable()):
+            if k < len(sol):
+                el['cx'], el['cy'] = sol[k]['cx'], sol[k]['cy']
+                el['angleDeg'] = sol[k]['angleDeg']
+        print('  已按标准解摆好（这一步算作弊，用来看正解长什么样）')
+        self.show()
+
+    def help(self):
+        print('''
+  指令一览（大小写都行）
+  ------------------------------------------------------------------
+  rot 编号 角度     把元件转到指定角度，例：rot 1 45
+  rot 编号 +5       在当前角度上加减，例：rot 1 -5
+  pos 编号 x y      把元件移到指定坐标，例：pos 1 400 300
+  axis 编号 角度    设偏振片透振方向 / 半波片快轴，例：axis 2 90
+
+  list              列出全部可动元件的编号、位置、角度、是否参与光路
+  sol               显示本关标准解（记一次提示）
+  auto              直接按标准解摆好（看正解用）
+  reset             本关重置
+  n / b             下一关 / 上一关
+  go 编号           直接跳到第几关，例：go 7
+  q                 退出
+  ------------------------------------------------------------------
+  通关要同时满足：全部目标点亮 + 不碰禁区 + 每块可动元件都参与光路
+''')
+
+
+def main():
+    try:
+        Game().run()
+    except KeyboardInterrupt:
+        print('\n  再见。')
+        sys.exit(0)
+
+
+if __name__ == '__main__':
+    main()
